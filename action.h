@@ -26,7 +26,7 @@ enum ev_id {
 	 */
 	evmarker
 #define clickmarker evmarker
-#define keymarker   (clickmarker+MAX_CLICKABLE_AREAS)
+#define keymarker   (clickmarker+2*MAX_CLICKABLE_AREAS)
 };
 
 struct _ev_list {

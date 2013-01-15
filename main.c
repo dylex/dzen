@@ -27,9 +27,6 @@
 Dzen dzen = {0};
 static int last_cnt = 0;
 typedef void sigfunc(int);
-click_a sens_areas[MAX_CLICKABLE_AREAS];
-int sens_areas_cnt=0;
-
 
 static void
 clean_up(void) {
@@ -196,6 +193,8 @@ x_draw_body(void) {
 	dzen.y = 0;
 	dzen.w = dzen.slave_win.width;
 	dzen.h = dzen.line_height;
+	
+	window_sens[SLAVEWINDOW].sens_areas_cnt = 0;
 
 	if(!dzen.slave_win.last_line_vis) {
 		if(dzen.slave_win.tcnt < dzen.slave_win.max_lines) {
@@ -702,19 +701,17 @@ handle_xev(void) {
 			}
 
 			/* clickable areas */
-             for(i=sens_areas_cnt-1; i>=0; i--) {
-				if((sens_areas[i].line < 0 ? 
-							ev.xbutton.window == dzen.title_win.win : 
-							sens_areas[i].line >= dzen.slave_win.first_line_vis &&
-							sens_areas[i].line <= dzen.slave_win.last_line_vis &&
-							ev.xbutton.window == dzen.slave_win.line[sens_areas[i].line-dzen.slave_win.first_line_vis]) &&
-						ev.xbutton.button == sens_areas[i].button &&
-						(ev.xbutton.x >=  sens_areas[i].start_x+xorig &&
-						ev.xbutton.x <=  sens_areas[i].end_x+xorig) &&
-						(ev.xbutton.y >=  sens_areas[i].start_y &&
-						ev.xbutton.y <=  sens_areas[i].end_y) &&
-                        sens_areas[i].active) {
-					do_action(clickmarker+i);
+			int w_id = ev.xbutton.window == dzen.title_win.win ? 0 : 1;
+			sens_w w = window_sens[w_id];
+			for(i=w.sens_areas_cnt; i>=0; i--) {
+				if(ev.xbutton.window == w.sens_areas[i].win &&
+						ev.xbutton.button == w.sens_areas[i].button &&
+						(ev.xbutton.x >=  w.sens_areas[i].start_x+xorig[w_id] &&
+						ev.xbutton.x <=  w.sens_areas[i].end_x+xorig[w_id]) &&
+						(ev.xbutton.y >=  w.sens_areas[i].start_y &&
+						ev.xbutton.y <=  w.sens_areas[i].end_y) &&
+						w.sens_areas[i].active) {
+					do_action(clickmarker+w_id*MAX_CLICKABLE_AREAS+i);
 					sa_clicked++;
 					break;
 				}

@@ -23,6 +23,9 @@
 #define ALIGNLEFT   1
 #define ALIGNRIGHT  2
 
+#define TOPWINDOW   0
+#define SLAVEWINDOW 1
+
 #define MIN_BUF_SIZE   1024
 #define MAX_LINE_LEN   8192
 
@@ -64,15 +67,21 @@ struct Fnt {
 typedef struct _CLICK_A {
     int active;
 	int button;
-	int line;
 	int start_x;
 	int end_x;
 	int start_y;
 	int end_y;
+	Window win;		//(line)window to which the action is attached
 } click_a;
-extern click_a sens_areas[MAX_CLICKABLE_AREAS];
-extern int sens_areas_cnt;
-extern int xorig;
+
+typedef struct _SENS_PER_WINDOW {
+	click_a sens_areas[MAX_CLICKABLE_AREAS];
+	int sens_areas_cnt;
+} sens_w;
+
+//0: top window, 1: slave window
+extern int xorig[2];
+extern sens_w window_sens[2];
 
 
 /* title window */

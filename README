@@ -453,7 +453,8 @@ Interaction:
 
     ^ca(BTN, ACT) ... ^ca()      
 
-                       Used to define 'clickable areas'.
+                       Used to define 'clickable areas' anywhere inside the
+                       title window or slave window. 
                        - 'BTN' denotes the mouse button (1=left, 2=right, 3=middle, etc.) 
                        - 'ACT' denotes the action that should be executed when the specific
                          area has been clicked with the defined button

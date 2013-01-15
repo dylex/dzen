@@ -20,6 +20,7 @@
 #define MAX_ICON_CACHE 32
 
 #define MAX(a,b) ((a)>(b)?(a):(b))
+#define LNR2WINDOW(lnr) lnr==-1?0:1
 
 typedef struct ICON_C {
 	char name[ARGLEN];
@@ -31,7 +32,9 @@ typedef struct ICON_C {
 icon_c icons[MAX_ICON_CACHE];
 int icon_cnt;
 int otx;
-int xorig=0;
+
+int xorig[2];
+sens_w window_sens[2];
 
 /* command types for the in-text parser */
 enum ctype  {bg, fg, icon, rect, recto, circle, circleo, pos, abspos, titlewin, ibg, fn, fixpos, ca, ba};
@@ -153,6 +156,8 @@ setfont(const char *fontstr) {
 	}
 	dzen.font.height = dzen.font.ascent + dzen.font.descent;
 #else
+        if(dzen.font.xftfont)
+           XftFontClose(dzen.dpy, dzen.font.xftfont);
 	dzen.font.xftfont = XftFontOpenXlfd(dzen.dpy, dzen.screen, fontstr);
 	if(!dzen.font.xftfont)
 	   dzen.font.xftfont = XftFontOpenName(dzen.dpy, dzen.screen, fontstr);
@@ -217,8 +222,8 @@ setcolor(Drawable *pm, int x, int width, long tfg, long tbg, int reverse, int no
 }
 
 int 
-get_sens_area(char *s, int i) {
-    sens_areas[i].button = atoi(s);
+get_sens_area(char *s, int *b, int i) {
+    *b = atoi(s);
     char *comma = strchr(s, ',');
     if (comma) while (isspace(*++comma));
     fill_ev_action(clickmarker+i, comma);
@@ -419,9 +424,8 @@ parse_line(const char *line, int lnr, int align, int reverse, int nodraw) {
 	else {
 		h = dzen.font.height;
 		py = (dzen.line_height - h) / 2;
-		xorig = 0;
-
-
+		xorig[LNR2WINDOW(lnr)] = 0;
+		
 		if(lnr != -1) {
 			pm = XCreatePixmap(dzen.dpy, RootWindow(dzen.dpy, DefaultScreen(dzen.dpy)), dzen.slave_win.width,
 					dzen.line_height, DefaultDepth(dzen.dpy, dzen.screen));
@@ -429,7 +433,6 @@ parse_line(const char *line, int lnr, int align, int reverse, int nodraw) {
 		else {
 			pm = XCreatePixmap(dzen.dpy, RootWindow(dzen.dpy, DefaultScreen(dzen.dpy)), dzen.title_win.width,
 					dzen.line_height, DefaultDepth(dzen.dpy, dzen.screen));
-			sens_areas_cnt = 0;
 		}
 
 #ifdef DZEN_XFT
@@ -484,7 +487,7 @@ parse_line(const char *line, int lnr, int align, int reverse, int nodraw) {
 
 		if( lnr != -1 && (lnr + dzen.slave_win.first_line_vis >= dzen.slave_win.tcnt)) {
 			XCopyArea(dzen.dpy, pm, dzen.slave_win.drawable[lnr], dzen.gc,
-					0, 0, px, dzen.line_height, xorig, 0);
+					0, 0, px, dzen.line_height, xorig[LNR2WINDOW(lnr)], 0);
 			XFreePixmap(dzen.dpy, pm);
 			return NULL;
 		}
@@ -732,30 +735,39 @@ parse_line(const char *line, int lnr, int align, int reverse, int nodraw) {
 							font_was_set = 1;
 							break;
 						case ca:
-								if(tval[0]) {
-									if(sens_areas_cnt < MAX_CLICKABLE_AREAS) {
-										get_sens_area(tval, sens_areas_cnt);
-										sens_areas[sens_areas_cnt].line = lnr >= 0 ? dzen.slave_win.first_line_vis+lnr : lnr;
-										sens_areas[sens_areas_cnt].start_x = px;
-										sens_areas[sens_areas_cnt].start_y = py;
-										sens_areas[sens_areas_cnt].end_y = py;
-										max_y = py;
-                                        sens_areas[sens_areas_cnt].active = 0;
-                                        sens_areas_cnt++;
+						{
+							sens_w *w = &window_sens[LNR2WINDOW(lnr)];
+							
+							if(tval[0]) {
+								click_a *area = &((*w).sens_areas[(*w).sens_areas_cnt]);
+								if((*w).sens_areas_cnt < MAX_CLICKABLE_AREAS) {
+									get_sens_area(tval, 
+											&(*area).button, 
+											LNR2WINDOW(lnr)*MAX_CLICKABLE_AREAS+(*w).sens_areas_cnt);
+									(*area).start_x = px;
+									(*area).start_y = py;
+									(*area).end_y = py;
+									max_y = py;
+									(*area).active = 0;
+									if(lnr == -1) {
+										(*area).win = dzen.title_win.win;
+									} else {
+										(*area).win = dzen.slave_win.line[lnr];
 									}
-								} else {
-                                        /* find most recent unclosed area */
-                                        for(i = sens_areas_cnt - 1; i >= 0; i--)
-                                            if(!sens_areas[i].active)
-                                                break;
-                                        if(i >= 0 && i < MAX_CLICKABLE_AREAS) {
-                                            sens_areas[i].end_x = px;
-                                            sens_areas[i].end_y = max_y;
-                                            sens_areas[i].active = 1;
-
-									}
+									(*w).sens_areas_cnt++;
 								}
-							break;
+							} else {
+									//find most recent unclosed area
+									for(i = (*w).sens_areas_cnt - 1; i >= 0; i--)
+										if(!(*w).sens_areas[i].active)
+											break;
+									if(i >= 0 && i < MAX_CLICKABLE_AREAS) {
+										(*w).sens_areas[i].end_x = px;
+										(*w).sens_areas[i].end_y = max_y;
+										(*w).sens_areas[i].active = 1;
+								}
+							}
+						}	break;
 						case ba:
 							if(tval[0])
 								get_block_align_vals(tval, &block_align, &block_width);
@@ -868,14 +880,14 @@ parse_line(const char *line, int lnr, int align, int reverse, int nodraw) {
 
 		} else {
 			if(align == ALIGNLEFT)
-				xorig = 0;
+				xorig[LNR2WINDOW(lnr)] = 0;
 			if(align == ALIGNCENTER) {
-				xorig = (lnr != -1) ?
+				xorig[LNR2WINDOW(lnr)] = (lnr != -1) ?
 					(dzen.slave_win.width - px)/2 :
 					(dzen.title_win.width - px)/2;
 			}
 			else if(align == ALIGNRIGHT) {
-				xorig = (lnr != -1) ?
+				xorig[LNR2WINDOW(lnr)] = (lnr != -1) ?
 					(dzen.slave_win.width - px) :
 					(dzen.title_win.width - px);
 			}
@@ -884,11 +896,11 @@ parse_line(const char *line, int lnr, int align, int reverse, int nodraw) {
 
 		if(lnr != -1) {
 			XCopyArea(dzen.dpy, pm, dzen.slave_win.drawable[lnr], dzen.gc,
-					0, 0, dzen.w, dzen.line_height, xorig, 0);
+                    0, 0, dzen.w, dzen.line_height, xorig[LNR2WINDOW(lnr)], 0);
 		}
 		else {
 			XCopyArea(dzen.dpy, pm, dzen.title_win.drawable, dzen.gc,
-					0, 0, dzen.w, dzen.line_height, xorig, 0);
+					0, 0, dzen.w, dzen.line_height, xorig[LNR2WINDOW(lnr)], 0);
 		}
 		XFreePixmap(dzen.dpy, pm);
 
@@ -991,7 +1003,9 @@ drawheader(const char * text) {
 		if (text){
 			dzen.w = dzen.title_win.width;
 			dzen.h = dzen.line_height;
-
+			
+			window_sens[TOPWINDOW].sens_areas_cnt = 0;
+			
 			XFillRectangle(dzen.dpy, dzen.title_win.drawable, dzen.rgc, 0, 0, dzen.w, dzen.h);
 			parse_line(text, -1, dzen.title_win.alignment, 0, 0);
 		}
@@ -1008,6 +1022,7 @@ void
 drawbody(char * text) {
 	char *ec;
 	int i, write_buffer=1;
+	
 
 	if(dzen.slave_win.tcnt == -1) {
 		dzen.slave_win.tcnt = 0;
@@ -1015,14 +1030,9 @@ drawbody(char * text) {
 		return;
 	}
 
+	
 	if((ec = strstr(text, "^tw()")) && (*(ec-1) != '^')) {
-		dzen.w = dzen.title_win.width;
-		dzen.h = dzen.line_height;
-
-		XFillRectangle(dzen.dpy, dzen.title_win.drawable, dzen.rgc, 0, 0, dzen.w, dzen.h);
-		parse_line(ec+5, -1, dzen.title_win.alignment, 0, 0);
-		XCopyArea(dzen.dpy, dzen.title_win.drawable, dzen.title_win.win,
-				dzen.gc, 0, 0, dzen.w, dzen.h, 0, 0);
+		drawheader(ec+5);
 		return;
 	}
 
